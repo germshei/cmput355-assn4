@@ -6,46 +6,50 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <stdbool.h>
+#include <math.h>
 
 #define HISTORY_LENGTH	20
 
 #define BOARD_ROWS	11
 #define BOARD_COLS	11
 
-struct board		game_state;
+GameBoard		board;
+Graph			*hex_graph;
 static const char	*alphabet	= "abcdefghijklmnopqrstuvwxyz";
 
 void	start_game()
 {
-	game_state.rows	= BOARD_ROWS;
-	game_state.cols	= BOARD_COLS;
-	game_state.turn	= -1;
+	board.rows	= BOARD_ROWS;
+	board.cols	= BOARD_COLS;
+	board.turn	= -1;
 
 	// if playing against computer:
-	// game_state.computer_turn = 1 or 0
+	// board.computer_turn = 1 or 0
 	// otherwise:
-	game_state.computer_turn = -1;
+	board.computer_turn = 1;
 
-	int contents_len	= game_state.rows * game_state.cols;
-	game_state.contents	= calloc(contents_len, sizeof(char));
+	int contents_len	= board.rows * board.cols;
+	board.contents		= calloc(contents_len, sizeof(char));
 
-	game_state.history_len	= game_state.rows * game_state.cols + 1; // store max # possible moves + 1 for pie
-	game_state.history	= calloc(game_state.history_len, sizeof(char));
+	board.history_len	= board.rows * board.cols + 1; // store max # possible moves + 1 for pie
+	board.history		= calloc(board.history_len, sizeof(char));
 
-	game_state.players[0]	= 'X';
-	game_state.colours[0]	= ANSI_STYLE(FG RED);
-	game_state.players[1]	= 'O';
-	game_state.colours[1]	= ANSI_STYLE(FG_BRIGHT BLUE);
+	board.players[0]	= 'X';
+	board.colours[0]	= ANSI_STYLE(FG RED);
+	board.players[1]	= 'O';
+	board.colours[1]	= ANSI_STYLE(FG_BRIGHT BLUE);
 
-	game_state.empty_cell	= ' ';
+	board.empty_cell	= ' ';
 
-	game_state.finished	= false;
+	board.finished	= false;
 
-	memset(game_state.contents, game_state.empty_cell, contents_len);
+	memset(board.contents, board.empty_cell, contents_len);
 
-	while (!game_state.finished)
+	hex_graph = construct_graph();
+
+	while (!board.finished)
 	{
-		game_state.turn++;
+		board.turn++;
 		
 		int	row	= -1;
 		int	col	= -1;
@@ -53,16 +57,18 @@ void	start_game()
 
 		print_board();
 
-		int player = game_state.turn % 2;
+		int player = board.turn % 2;
 
-		if (player == game_state.computer_turn)
+		compute_best_move(board.players[player]);
+
+		if (player == board.computer_turn)
 		{
 			// do computer turn
 			continue;
 		}
 
 		// Second player has the option to invoke pie rule
-		if (game_state.turn == 1)
+		if (board.turn == 1)
 		{
 			char	c;
 
@@ -77,7 +83,7 @@ void	start_game()
 			{
 				invoke_pie();
 				Coordinate move_record = {-1, -1};
-				game_state.history[game_state.turn] = move_record;
+				board.history[board.turn] = move_record;
 				continue;
 			}
 
@@ -102,25 +108,25 @@ void	start_game()
 			{
 				printf("A move must be in the form of a row followed by a column (%c1 - %c%d). "
 					"A move can only be made in an empty cell.\n",
-					alphabet[0], alphabet[game_state.rows - 1], game_state.cols);
+					alphabet[0], alphabet[board.rows - 1], board.cols);
 			}
 
 		}	while(!valid_cell);
 
-		set_cell(game_state.players[game_state.turn % 2], row, col);
+		set_cell(board.players[board.turn % 2], row, col);
 		Coordinate move_record = {row, col};
-		game_state.history[game_state.turn] = move_record;
+		board.history[board.turn] = move_record;
 	}
 }
 
 bool	validate_move(int row, int col)
 {
-	bool invalid =	row >= game_state.rows ||
+	bool invalid =	row >= board.rows ||
 			row < 0 ||
-			col >= game_state.cols || 
+			col >= board.cols || 
 			col < 0 ;
 
-	invalid |= cell_state(row, col) != game_state.empty_cell;
+	invalid |= cell_state(row, col) != board.empty_cell;
 
 	return !invalid;
 
@@ -128,8 +134,8 @@ bool	validate_move(int row, int col)
 
 void	set_cell(char player, int row, int col)
 {
-	size_t	index	= row * game_state.rows + col;
-	game_state.contents[index] = player;
+	size_t	index	= row * board.cols + col;
+	board.contents[index] = player;
 }
 
 void	invoke_pie()
@@ -139,8 +145,8 @@ void	invoke_pie()
 
 void	print_board()
 {
-	int	rows	= game_state.rows;
-	int	cols	= game_state.cols;
+	int	rows	= board.rows;
+	int	cols	= board.cols;
 
 	int	hex_width	= 4;
 
@@ -161,8 +167,8 @@ void	print_board()
 	int	sequence_end	= 1;
 
 	size_t	line_length	= width
-				* max(	strlen(game_state.colours[0]) + strlen(ANSI_CLEAR()) + 1,
-					strlen(game_state.colours[1]) + strlen(ANSI_CLEAR()) + 1);
+				* max(	strlen(board.colours[0]) + strlen(ANSI_CLEAR()) + 1,
+					strlen(board.colours[1]) + strlen(ANSI_CLEAR()) + 1);
 
 	char	*line_buffer	= calloc(line_length, sizeof(char));
 
@@ -220,7 +226,7 @@ void	print_board()
 				Coordinate	c	= coordinate_from_segment(line, i - sequence_start);
 				char		player	= cell_state(c.x, c.y);
 
-				if (player == game_state.empty_cell)
+				if (player == board.empty_cell)
 				{
 					linep = stpcpy(linep, seg);
 				}
@@ -230,13 +236,13 @@ void	print_board()
 					char *colour;
 					char *fmt_seg;
 
-					if (player == game_state.players[0])
+					if (player == board.players[0])
 					{
-						colour = game_state.colours[0];
+						colour = board.colours[0];
 					}
-					else if (player == game_state.players[1])
+					else if (player == board.players[1])
 					{
-						colour = game_state.colours[1];
+						colour = board.colours[1];
 					}
 
 					fmt_seg	= colorize(buffer, colour);
@@ -247,8 +253,8 @@ void	print_board()
 			}
 			else if ( (line == 0 || line == height - 1) && (seg == segment_line) )
 			{
-				char	*s1	= colorize(segment_line_half, game_state.colours[0]);
-				char	*s2	= colorize(segment_line_half, game_state.colours[1]);
+				char	*s1	= colorize(segment_line_half, board.colours[0]);
+				char	*s2	= colorize(segment_line_half, board.colours[1]);
 
 				if (line == height - 1)
 				{
@@ -270,7 +276,7 @@ void	print_board()
 
 				strcpy(buffer, seg);
 
-				fmt_seg	= colorize(buffer, game_state.colours[0]);
+				fmt_seg	= colorize(buffer, board.colours[0]);
 				linep	= stpcpy(linep, fmt_seg);
 
 				free(fmt_seg);
@@ -282,7 +288,7 @@ void	print_board()
 
 				strcpy(buffer, seg);
 
-				fmt_seg	= colorize(buffer, game_state.colours[1]);
+				fmt_seg	= colorize(buffer, board.colours[1]);
 				linep	= stpcpy(linep, fmt_seg);
 
 				free(fmt_seg);
@@ -329,13 +335,13 @@ void	print_board()
 
 char	*serialize_game()
 {
-	size_t	size		= 4 * game_state.turn;
+	size_t	size		= 4 * board.turn;
 	char	*hist		= malloc(sizeof(char) * size);
 	char	buffer[8];
 
-	for (int i = 0; i < game_state.turn; i++)
+	for (int i = 0; i < board.turn; i++)
 	{
-		Coordinate c = game_state.history[i];
+		Coordinate c = board.history[i];
 		int row	= c.x;
 		int col	= c.y;
 
@@ -366,8 +372,8 @@ char	*serialize_game()
 
 Coordinate	coordinate_from_segment(int line, int segment)
 {
-	int rows = game_state.rows;
-	int cols = game_state.cols;
+	int rows = board.rows;
+	int cols = board.cols;
 
 	int row, col, shift;
 
@@ -399,55 +405,465 @@ Coordinate	coordinate_from_segment(int line, int segment)
 
 char	cell_state(int row, int col)
 {
-	int index	= row * game_state.rows + col;
-	char cell	= game_state.contents[index];
+	int index	= row * board.cols + col;
+	char cell	= board.contents[index];
 
 	return cell;
 }
 
-Graph	construct_graph()
+char	check_winner()
 {
-	Graph	*g	= malloc(sizeof(Graph));
-	g->length	= game_state.rows * game_state.cols + 4;
+	return ' ';
+}
 
-	if (!g)
-	{
-		printf("Could not allocate enough memory!\n");
-		return NULL;
+int	count_neighbours(int row, int col)
+{
+	/*    1
+	 * 0 \-1/-1
+	 * -1/0 \_0
+	 * 1 \_0/0
+	 *  0/1 \ 1
+	 *     1
+	 */    
+
+	int	rows	= board.rows,
+		cols	= board.cols,
+		n	= 6;
+
+	if	(row == 0 && col == 0)	n -= 3;
+	else if	(row == 0 || col == 0)	n -= 2;
+
+	if	(row + 1 == rows && col + 1 == cols)	n -= 3;
+	else if	(row + 1 == rows || col + 1 == cols)	n -= 2;
+
+	printf("cell %c%2d has %d neighbours\n", alphabet[row], col, n);
+
+	return	n;
+}
+
+Graph	*construct_graph()
+{
+	int	rows	= board.rows,
+		cols	= board.cols;
+
+	size_t	length	= board.rows * board.cols;
+	Graph	*graph	= malloc(sizeof(Graph));
+
+	graph->nodes	= malloc(sizeof(Node) * length);
+	graph->size	= length;
+
+	graph->top.neighbours	= malloc(sizeof(Node *) * cols);
+	graph->bottom.neighbours= malloc(sizeof(Node *) * cols);
+	graph->left.neighbours	= malloc(sizeof(Node *) * rows);
+	graph->right.neighbours	= malloc(sizeof(Node *) * rows);
+
+	graph->top.size		= cols;
+	graph->bottom.size	= cols;
+	graph->left.size	= rows;
+	graph->right.size	= rows;
+	graph->top.length	= 0;
+	graph->bottom.length	= 0;
+	graph->left.length	= 0;
+	graph->right.length	= 0;
+
+	graph->top.row		= -1;
+	graph->top.col		= 0;
+	graph->bottom.row	= rows;
+	graph->bottom.col	= 0;
+	graph->left.row		= 0;
+	graph->left.col		= -1;
+	graph->right.row	= 0;
+	graph->right.col	= cols;
+
+	for (int i = 0; i < length; i++)
+	{ 
+		int	col	= i % rows,
+			row	= (i - col) / rows;
+		Node	*node	= &(graph->nodes[i]);
+
+		node->row	= row;
+		node->col	= col;
+		node->length	= 0;
+
+		int	n	= count_neighbours(row, col);
+
+		if (	(row == 0 && col == 0)		||	// 0, 0	
+			(row + 1 == rows && col == 0)	||	// n, 0
+			(row == 0 && col + 1 == cols)	||	// 0, m
+			(row + 1 == rows && col + 1 == cols) )	// n, m
+		{
+			// corner cells connect to their neighbours plus two sides
+			node->size		= n + 2;
+		}
+		else if	(row == 0 || col == 0 || row + 1 == rows || col + 1 == cols)
+		{
+			// edge cells connect to their neighbours and one side
+			node->size		= n + 1;
+		}
+		else
+		{
+			// regular cells connec to all 6 neighbours
+			node->size		= n;
+		}
+
+		printf("Allocating space for %d nodes for cell %c%2d\n", node->size, alphabet[node->row], node->col);
+		node->neighbours = malloc(sizeof(Node *) * node->size);
 	}
 
-	g->nodes = malloc(sizeof(HexNode) * n_nodes);
-	g->top		= g->nodes[n_nodes - 1];
-	g->bottom	= g->nodes[n_nodes - 2];
-	g->left		= g->nodes[n_nodes - 3];
-	g->right	= g->nodes[n_nodes - 4];
-
-	g->left->length		= game_state.rows;
-	g->right->length	= game_state.rows;
-	g->top->length		= game_state.cols;
-	g->bottom->length	= game_state.cols;
-
-	g->left->neighbours	= malloc(sizeof(HexNode *) * g->left->length);
-	g->right->neighbours	= malloc(sizeof(HexNode *) * g->right->length);
-	g->top->neighbours	= malloc(sizeof(HexNode *) * g->top->length);
-	g->bottom->neighbours	= malloc(sizeof(HexNode *) * g->bottom->length);
-
-	if (!g.nodes)
+	for (int i = 0; i < graph->size; i++)
 	{
-		printf("Could not allocate enough memory!\n");
-		free(g);
-		return NULL;
-	}
-
-	for (int i = 0; i < g->length - 4; i++)
-	{
-		HexNode	n	= g->nodes[i];
-		int	row	= i % game_state.rows;
-		int	col	= i - row * game_state.cols;
+		int	col	= i % rows,
+			row	= (i - col) / rows;
+		Node	*node	= &(graph->nodes[i]);
 
 		if (row == 0)
 		{
-			n->neighbours
+			set_neighbouring(node, &graph->left);
+		}
+		else
+		{
+			int n_row = row - 1;
+			int n_col = col;
+			set_neighbouring(node, &graph->nodes[n_row * rows + n_col]);
+		}
+
+		if (col == 0)
+		{
+			set_neighbouring(node, &graph->top);
+		}
+		else
+		{
+			int n_row = row;
+			int n_col = col - 1;
+			set_neighbouring(node, &graph->nodes[n_row * rows + n_col]);
+		}
+
+		if (row + 1 == rows)
+		{
+			set_neighbouring(node, &graph->right);
+		}
+		else
+		{
+			int n_row = row + 1;
+			int n_col = col;
+			set_neighbouring(node, &graph->nodes[n_row * rows + n_col]);
+		}
+
+		if (col + 1 == cols)
+		{
+			set_neighbouring(node, &graph->bottom);
+		}
+		else
+		{
+			int n_row = row;
+			int n_col = col + 1;
+			set_neighbouring(node, &graph->nodes[n_row * rows + n_col]);
+		}
+
+		if (row + 1 != rows && col + 1 != cols)
+		{
+			int n_row = row + 1;
+			int n_col = col + 1;
+			set_neighbouring(node, &graph->nodes[n_row * rows + n_col]);
+		}
+
+		if (row - 1 >= 0 && col - 1 >= 0)
+		{
+			int n_row = row - 1;
+			int n_col = col - 1;
+			set_neighbouring(node, &graph->nodes[n_row * rows + n_col]);
+		}
+
+	}
+
+	return graph;
+}
+
+void	set_neighbouring(Node *a, Node *b)
+{
+	if (a->length == a->size || b->length == b->size)
+	{
+		// node already has max # of connections
+		return;
+	}
+
+	for (int i = 0; i < a->size; i++)
+	{
+		if (a->neighbours[i] == b)	return;	// A & B already connected
+	}
+
+	for (int i = 0; i < b->size; i++)
+	{
+		if (b->neighbours[i] == a)	return; // shouldn't be necesary if the above check passed
+	}
+
+	a->neighbours[a->length] = b;
+	b->neighbours[b->length] = a;
+
+	a->length++;
+	b->length++;
+}
+
+int	alphabeta(char *s, int d, int a, int b, int turn, int max_turn)
+{
+	if (d == 0 || check_winner(s))
+	{
+		printf("reached leaf / limit\n");
+		return alphabeta_heuristic(s, max_turn);
+	}
+
+	if (turn % 2 == max_turn)
+	{
+		int v = -INFINITY;
+		printf("max step, turn %d, max_turn %d, a %d, b %d\n", turn, max_turn, a, b);
+		for (int i = 0; i < (board.rows * board.cols); i++)
+		{
+			if (s[i] == board.empty_cell)
+			{
+				s[i]	= board.players[max_turn];
+				v	= max(v, alphabeta(s, d - 1, a, b, turn + 1, max_turn));
+				s[i]	= board.empty_cell;
+
+				a = max(a, v);
+				if (a >= b) break;
+			}
+		}
+		printf("done max step\n");
+		return v;
+	}
+	else
+	{
+		int v = +INFINITY;
+		printf("min step, turn %d, max_turn %d, a %d, b %d\n", turn, max_turn, a, b);
+		for (int i = 0; i < (board.rows * board.cols); i++)
+		{
+			if (s[i] == board.empty_cell)
+			{
+				s[i]	= board.players[(max_turn + 1) % 2];
+				v	= min(v, alphabeta(s, d - 1, a, b, turn + 1, max_turn));
+				s[i]	= board.empty_cell;
+
+				b	= min(b, v);
+				if (a >= b) break;
+			}
+		}
+		printf("done max step\n");
+		return v;
+	}
+}
+
+int	alphabeta_heuristic(char *state, int max_turn)
+{
+	char	player		= board.players[max_turn],
+		opponent	= board.players[(max_turn + 1) % 2];
+	//return	shortest_path(state, opponent) - shortest_path(state, player);
+	return	djikstra(state, opponent) - djikstra(state, player);
+}
+
+int	shortest_path(char *state, char player)
+{
+	printf("Calculating shortest path for %c\n", player);
+	Node	start, 
+		*node,
+		*child,
+		dest;
+	// djikstra shortest path
+	if (player == board.players[0])
+	{
+		start	= hex_graph->left;
+		dest	= hex_graph->right;
+	}
+	else
+	{
+		start	= hex_graph->top;
+		dest	= hex_graph->bottom;
+	}
+
+	start.dist = 0;
+	start.prev = NULL;
+
+	bool *visited = malloc(sizeof(bool) * hex_graph->size);
+	int	*dist;
+	memset(visited, false, sizeof(bool) * hex_graph->size);
+
+	for (int i = 0; i < hex_graph->size; i++)
+	{
+		node = &(hex_graph->nodes[i]);
+		node->prev = NULL;
+		node->dist = INFINITY;
+	}
+
+	for (int i = 0; i < hex_graph->size; i++)
+	{
+		if (visited[i])	continue;
+
+		node = &(hex_graph->nodes[i]);
+		for (int j = 0; j < node->size; j++)
+		{
+			child			= node->neighbours[j];
+			int	child_index	= child->row * board.cols + child->col;
+			if (visited[child_index])	continue;
+
+			char	cell_value	= cell_state(child->row, child->col);
+
+			if (cell_value != board.empty_cell && cell_value != player)
+			{
+				child->dist		= INFINITY;
+				visited[child_index]	= true;
+				continue;
+			}
+
+			int n;
+
+			if (cell_value == player)
+			{
+				n = 0;
+			}
+			else
+			{
+				n = 1;
+			}
+
+			n += node->dist;
+
+			if (n < child->dist)
+			{
+				child->dist = n;
+				child->prev = node;
+			}
 		}
 	}
+
+	free(visited);
+	printf("Found shortest path: %d\n", dest.dist);
+	return dest.dist;
+}
+
+int	djikstra(char *state, char player)
+{
+	Node	*node,
+		*dest;
+
+	if (player == board.players[0])
+	{
+		node = &(hex_graph->left);
+		dest = &(hex_graph->right);
+	}
+	else
+	{
+		node = &(hex_graph->top);
+		dest = &(hex_graph->bottom);
+	}
+
+	hex_graph->left.dist	= INFINITY;
+	hex_graph->right.dist	= INFINITY;
+	hex_graph->top.dist		= INFINITY;
+	hex_graph->bottom.dist	= INFINITY;
+
+	hex_graph->left.prev	= NULL;
+	hex_graph->right.prev	= NULL;
+	hex_graph->top.prev		= NULL;
+	hex_graph->bottom.prev	= NULL;
+
+	node->dist		= 0;
+
+	int	size		= board.rows * board.cols;
+	bool	*visited	= malloc(sizeof(bool) * size);
+	//int	*distances	= malloc(sizeof(int) * size);
+
+	memset(visited, false, sizeof(bool) * size);
+
+	for (int i = 0; i < size; i++)
+	{
+		hex_graph->nodes[i].dist = INFINITY;
+		hex_graph->nodes[i].prev = NULL;
+	}
+
+	for (int i = 0; i < size; i++)
+	{
+		if (node->row >= 0 && node->col >= 0)
+		{
+			int	node_index	= node->row * board.cols + node->col;
+			visited[node_index]	= true;
+		}
+
+		for (int j = 0; j < node->length; j++)
+		{
+			Node	*child		= node->neighbours[j];
+			int	child_index	= child->row * board.cols + child->col;
+
+			// child is either a side (top, bottom, etc..) or an unvisited node
+			if ( (child->row < 0 || child->col < 0) || !visited[child_index] )
+			{
+				int weight;
+				if (	(child->row < 0 || child->col < 0) ||
+					state[child_index] == player)
+				{
+					weight = 0;
+				}
+				else if (state[child_index] == board.empty_cell)
+				{
+					weight = 1;
+				}
+				else
+				{
+					continue;
+				}
+
+				if (node->dist + weight < child->dist)
+				{
+					child->dist = node->dist + weight;
+					child->prev = node;
+				}
+			}
+		}
+	}
+
+	free(visited);
+
+	if (player == board.players[0])
+	{
+		printf("Shortest path to right for %c is %d\n", player, dest->dist);
+	}
+	else
+	{
+		printf("Shortest path to bottom for %c is %d\n", player, dest->dist);
+	}
+
+	return dest->dist;
+}
+
+Coordinate	compute_best_move(char player)
+{
+	printf("Computing best move for %c\n", player);
+	size_t	length		= board.rows * board.cols;
+	char	*current_state	= malloc(length * sizeof(char));
+
+	memcpy(current_state, board.contents, length * sizeof(char));
+
+	Coordinate	c	= {-1, -1};
+	int		v	= -INFINITY;
+
+	int		turn	= player == board.players[0] ? 0 : 1;
+
+	for (int i = 0; i < length; i++)
+	{
+		if (current_state[i] != board.empty_cell)	continue;
+		current_state[i]	= player;
+		int n			= alphabeta(current_state, 10, -INFINITY, INFINITY, turn, turn);
+		current_state[i]	= board.empty_cell;
+
+		if (n > v)
+		{
+			c.x = i / board.rows;
+			c.y = i % board.rows;
+			v = n;
+		}
+	}
+
+	free(current_state);
+
+	printf("For player %c best move is %c%2d\n", player, alphabet[c.x], c.y + 1);
+
+	return c;
 }
