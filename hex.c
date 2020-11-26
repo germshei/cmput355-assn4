@@ -13,9 +13,15 @@
 #define BOARD_ROWS	11
 #define BOARD_COLS	11
 
+#define INF		((int)INFINITY)
+
 GameBoard		board;
-Graph			*hex_graph;
 static const char	*alphabet	= "abcdefghijklmnopqrstuvwxyz";
+
+const Coordinate	TOP	= {INF, -INF};
+const Coordinate	BOTTOM	= {INF, +INF};
+const Coordinate	LEFT	= {-INF, INF};
+const Coordinate	RIGHT	= {+INF, INF};
 
 void	start_game()
 {
@@ -31,6 +37,7 @@ void	start_game()
 	int contents_len	= board.rows * board.cols;
 	board.contents		= calloc(contents_len, sizeof(char));
 
+
 	board.history_len	= board.rows * board.cols + 1; // store max # possible moves + 1 for pie
 	board.history		= calloc(board.history_len, sizeof(char));
 
@@ -43,9 +50,7 @@ void	start_game()
 
 	board.finished	= false;
 
-	memset(board.contents, board.empty_cell, contents_len);
-
-	hex_graph = construct_graph();
+	memset(board.contents, board.empty_cell, contents_len * sizeof(char));
 
 	while (!board.finished)
 	{
@@ -59,11 +64,16 @@ void	start_game()
 
 		int player = board.turn % 2;
 
-		compute_best_move(board.players[player]);
 
 		if (player == board.computer_turn)
 		{
 			// do computer turn
+			Coordinate move = compute_best_move(board.players[player]);
+
+			printf("Computer move: %c%2d\n", alphabet[move.x], move.y + 1);
+
+			set_cell(board.players[board.turn % 2], move.x, move.y);
+			board.history[board.turn] = move;
 			continue;
 		}
 
@@ -93,6 +103,8 @@ void	start_game()
 		// prompt player for a move
 		do
 		{
+			int	d	= djikstra(board.contents, board.players[player]);
+			printf("Player %d has %d moves to go\n", player + 1, d);
 			printf("Player %d, make a move: ", player + 1);
 			char	r;
 			int	c;
@@ -411,9 +423,15 @@ char	cell_state(int row, int col)
 	return cell;
 }
 
-char	check_winner()
+char	check_winner(char *state)
 {
-	return ' ';
+	printf("Checking winner\n");
+	if (djikstra(state, board.players[0]) == 0) return board.players[0];
+	if (djikstra(state, board.players[1]) == 0) return board.players[1];
+
+	printf("No winner yet!\n");
+
+	return 0;
 }
 
 int	count_neighbours(int row, int col)
@@ -436,434 +454,360 @@ int	count_neighbours(int row, int col)
 	if	(row + 1 == rows && col + 1 == cols)	n -= 3;
 	else if	(row + 1 == rows || col + 1 == cols)	n -= 2;
 
-	printf("cell %c%2d has %d neighbours\n", alphabet[row], col, n);
+	//printf("cell %c%2d has %d neighbours\n", alphabet[row], col, n);
 
 	return	n;
 }
 
-Graph	*construct_graph()
+/*
+int	*get_neighbours(int index)
 {
-	int	rows	= board.rows,
-		cols	= board.cols;
+	int col = index % board.cols;
+}
+*/
 
-	size_t	length	= board.rows * board.cols;
-	Graph	*graph	= malloc(sizeof(Graph));
+Coordinate	compute_best_move(char player)
+{
+	size_t	size		= board.rows * board.cols;
+	char	*temp_state	= malloc(sizeof(char) * size);
+	char	opponent	= player == board.players[0] ? board.players[1] : board.players[0];
 
-	graph->nodes	= malloc(sizeof(Node) * length);
-	graph->size	= length;
+	memcpy(temp_state, board.contents, size * sizeof(char));
 
-	graph->top.neighbours	= malloc(sizeof(Node *) * cols);
-	graph->bottom.neighbours= malloc(sizeof(Node *) * cols);
-	graph->left.neighbours	= malloc(sizeof(Node *) * rows);
-	graph->right.neighbours	= malloc(sizeof(Node *) * rows);
+	Coordinate	best_move	= {0, 0};
+	int		v		= -INF;
 
-	graph->top.size		= cols;
-	graph->bottom.size	= cols;
-	graph->left.size	= rows;
-	graph->right.size	= rows;
-	graph->top.length	= 0;
-	graph->bottom.length	= 0;
-	graph->left.length	= 0;
-	graph->right.length	= 0;
-
-	graph->top.row		= -1;
-	graph->top.col		= 0;
-	graph->bottom.row	= rows;
-	graph->bottom.col	= 0;
-	graph->left.row		= 0;
-	graph->left.col		= -1;
-	graph->right.row	= 0;
-	graph->right.col	= cols;
-
-	for (int i = 0; i < length; i++)
-	{ 
-		int	col	= i % rows,
-			row	= (i - col) / rows;
-		Node	*node	= &(graph->nodes[i]);
-
-		node->row	= row;
-		node->col	= col;
-		node->length	= 0;
-
-		int	n	= count_neighbours(row, col);
-
-		if (	(row == 0 && col == 0)		||	// 0, 0	
-			(row + 1 == rows && col == 0)	||	// n, 0
-			(row == 0 && col + 1 == cols)	||	// 0, m
-			(row + 1 == rows && col + 1 == cols) )	// n, m
-		{
-			// corner cells connect to their neighbours plus two sides
-			node->size		= n + 2;
-		}
-		else if	(row == 0 || col == 0 || row + 1 == rows || col + 1 == cols)
-		{
-			// edge cells connect to their neighbours and one side
-			node->size		= n + 1;
-		}
-		else
-		{
-			// regular cells connec to all 6 neighbours
-			node->size		= n;
-		}
-
-		printf("Allocating space for %d nodes for cell %c%2d\n", node->size, alphabet[node->row], node->col);
-		node->neighbours = malloc(sizeof(Node *) * node->size);
-	}
-
-	for (int i = 0; i < graph->size; i++)
+	for (int i = 0; i < size; i++)
 	{
-		int	col	= i % rows,
-			row	= (i - col) / rows;
-		Node	*node	= &(graph->nodes[i]);
+		// skip occupied cells
+		if (temp_state[i] != board.empty_cell) continue;
 
-		if (row == 0)
-		{
-			set_neighbouring(node, &graph->left);
-		}
-		else
-		{
-			int n_row = row - 1;
-			int n_col = col;
-			set_neighbouring(node, &graph->nodes[n_row * rows + n_col]);
-		}
+		int col = i % board.cols;
+		int row = (i - col) / board.cols;
+		// check aB value of this move
+		//printf("Checking value of move %c%d for %c\n", alphabet[row], col + 1, player);
+		temp_state[i] = player;
 
-		if (col == 0)
-		{
-			set_neighbouring(node, &graph->top);
-		}
-		else
-		{
-			int n_row = row;
-			int n_col = col - 1;
-			set_neighbouring(node, &graph->nodes[n_row * rows + n_col]);
-		}
+		int s = alphabeta(temp_state, 5, -INF, INF, player, opponent);
 
-		if (row + 1 == rows)
+		if (s > v)
 		{
-			set_neighbouring(node, &graph->right);
-		}
-		else
-		{
-			int n_row = row + 1;
-			int n_col = col;
-			set_neighbouring(node, &graph->nodes[n_row * rows + n_col]);
-		}
+			int col = i % board.cols;
+			int row = (i - col) / board.cols;
 
-		if (col + 1 == cols)
-		{
-			set_neighbouring(node, &graph->bottom);
-		}
-		else
-		{
-			int n_row = row;
-			int n_col = col + 1;
-			set_neighbouring(node, &graph->nodes[n_row * rows + n_col]);
-		}
+			printf("aB for %c%d = %d\n", alphabet[row], col + 1, s);
 
-		if (row + 1 != rows && col + 1 != cols)
-		{
-			int n_row = row + 1;
-			int n_col = col + 1;
-			set_neighbouring(node, &graph->nodes[n_row * rows + n_col]);
+			v = s;
+			best_move.x = row;
+			best_move.y = col;
 		}
-
-		if (row - 1 >= 0 && col - 1 >= 0)
-		{
-			int n_row = row - 1;
-			int n_col = col - 1;
-			set_neighbouring(node, &graph->nodes[n_row * rows + n_col]);
-		}
-
+		
+		temp_state[i] = board.empty_cell;
 	}
 
-	return graph;
+	return best_move;
 }
 
-void	set_neighbouring(Node *a, Node *b)
+int	alphabeta(char *state, int depth, int alpha, int beta, char maxp, char player)
 {
-	if (a->length == a->size || b->length == b->size)
+	/*
+	printf("alphabeta d=%d, a=%d, b=%d, maxp=%d, p=%d\n",
+		depth,
+		alpha,
+		beta,
+		maxp,
+		player);
+		*/
+
+	if (depth == 0 || check_winner(state) != 0)
 	{
-		// node already has max # of connections
-		return;
+		//printf(">>>terminal -- getting heuristic\n");
+		return alphabeta_heuristic(state, maxp);
 	}
 
-	for (int i = 0; i < a->size; i++)
+	char	minp	= maxp == board.players[0] ? board.players[1] : board.players[0];
+	int	cells	= board.rows * board.cols;
+
+	//printf("There are %d cells\n", cells);
+
+	if (player == maxp)	// maximizing state
 	{
-		if (a->neighbours[i] == b)	return;	// A & B already connected
-	}
+		//printf(">>>>maxp\n");
+		int v = -INF;
 
-	for (int i = 0; i < b->size; i++)
-	{
-		if (b->neighbours[i] == a)	return; // shouldn't be necesary if the above check passed
-	}
-
-	a->neighbours[a->length] = b;
-	b->neighbours[b->length] = a;
-
-	a->length++;
-	b->length++;
-}
-
-int	alphabeta(char *s, int d, int a, int b, int turn, int max_turn)
-{
-	if (d == 0 || check_winner(s))
-	{
-		printf("reached leaf / limit\n");
-		return alphabeta_heuristic(s, max_turn);
-	}
-
-	if (turn % 2 == max_turn)
-	{
-		int v = -INFINITY;
-		printf("max step, turn %d, max_turn %d, a %d, b %d\n", turn, max_turn, a, b);
-		for (int i = 0; i < (board.rows * board.cols); i++)
+		for (int anythingotherthani = 0; anythingotherthani < cells; anythingotherthani++)
 		{
-			if (s[i] == board.empty_cell)
+			//printf("FUCK FUCK FUCK\n");
+			if (state[anythingotherthani] == board.empty_cell)
 			{
-				s[i]	= board.players[max_turn];
-				v	= max(v, alphabeta(s, d - 1, a, b, turn + 1, max_turn));
-				s[i]	= board.empty_cell;
+				int col = anythingotherthani % board.cols;
+				int row = (anythingotherthani - col) / board.cols;
 
-				a = max(a, v);
-				if (a >= b) break;
+				/*
+				printf(">>>>checking maxp move %c%d\n",
+					alphabet[row],
+					col + 1);
+					*/
+
+				state[anythingotherthani]	= maxp;
+				v		= max(v, alphabeta(state, depth - 1, alpha, beta, maxp, minp));
+				alpha		= max(v, alpha);
+				state[anythingotherthani]	= board.empty_cell;
+			}
+
+			if (beta <= alpha)
+			{
+				break;
 			}
 		}
-		printf("done max step\n");
+
 		return v;
 	}
 	else
 	{
-		int v = +INFINITY;
-		printf("min step, turn %d, max_turn %d, a %d, b %d\n", turn, max_turn, a, b);
-		for (int i = 0; i < (board.rows * board.cols); i++)
+		//printf(">>>>minp\n");
+		int v = INF;
+
+		for (int i = 0; i < cells; i++)
 		{
-			if (s[i] == board.empty_cell)
+			if (state[i] == board.empty_cell)
 			{
-				s[i]	= board.players[(max_turn + 1) % 2];
-				v	= min(v, alphabeta(s, d - 1, a, b, turn + 1, max_turn));
-				s[i]	= board.empty_cell;
+				int col = i % board.cols;
+				int row = (i - col) / board.cols;
 
-				b	= min(b, v);
-				if (a >= b) break;
-			}
-		}
-		printf("done max step\n");
-		return v;
-	}
-}
-
-int	alphabeta_heuristic(char *state, int max_turn)
-{
-	char	player		= board.players[max_turn],
-		opponent	= board.players[(max_turn + 1) % 2];
-	//return	shortest_path(state, opponent) - shortest_path(state, player);
-	return	djikstra(state, opponent) - djikstra(state, player);
-}
-
-int	shortest_path(char *state, char player)
-{
-	printf("Calculating shortest path for %c\n", player);
-	Node	start, 
-		*node,
-		*child,
-		dest;
-	// djikstra shortest path
-	if (player == board.players[0])
-	{
-		start	= hex_graph->left;
-		dest	= hex_graph->right;
-	}
-	else
-	{
-		start	= hex_graph->top;
-		dest	= hex_graph->bottom;
-	}
-
-	start.dist = 0;
-	start.prev = NULL;
-
-	bool *visited = malloc(sizeof(bool) * hex_graph->size);
-	int	*dist;
-	memset(visited, false, sizeof(bool) * hex_graph->size);
-
-	for (int i = 0; i < hex_graph->size; i++)
-	{
-		node = &(hex_graph->nodes[i]);
-		node->prev = NULL;
-		node->dist = INFINITY;
-	}
-
-	for (int i = 0; i < hex_graph->size; i++)
-	{
-		if (visited[i])	continue;
-
-		node = &(hex_graph->nodes[i]);
-		for (int j = 0; j < node->size; j++)
-		{
-			child			= node->neighbours[j];
-			int	child_index	= child->row * board.cols + child->col;
-			if (visited[child_index])	continue;
-
-			char	cell_value	= cell_state(child->row, child->col);
-
-			if (cell_value != board.empty_cell && cell_value != player)
-			{
-				child->dist		= INFINITY;
-				visited[child_index]	= true;
-				continue;
-			}
-
-			int n;
-
-			if (cell_value == player)
-			{
-				n = 0;
+				/*
+				printf(">>>>checking minp move %c%d\n",
+					alphabet[row],
+					col);
+					*/
+				state[i]	= minp;
+				v		= min(v, alphabeta(state, depth - 1, alpha, beta, maxp, maxp));
+				beta		= min(v, beta);
+				state[i]	= board.empty_cell;
 			}
 			else
 			{
-				n = 1;
+				//printf(">>>>ignoring cell %c\n", state[i]);
 			}
 
-			n += node->dist;
-
-			if (n < child->dist)
+			if (beta <= alpha)
 			{
-				child->dist = n;
-				child->prev = node;
+				break;
 			}
 		}
-	}
 
-	free(visited);
-	printf("Found shortest path: %d\n", dest.dist);
-	return dest.dist;
+		return v;
+	}
+}
+
+int	alphabeta_heuristic(char *state, char player)
+{
+	char opponent = player == board.players[0] ? board.players[1] : board.players[0];
+	//return djikstra(state, opponent) - djikstra(state, player);
+	int	moves_left_player	= djikstra(state, player);
+	int	moves_left_opponent	= djikstra(state, opponent);
+
+	printf("Heuristic: %d moves left for player, %d moves left for opponent\n", moves_left_player, moves_left_opponent);
+
+	return moves_left_opponent - moves_left_player;
 }
 
 int	djikstra(char *state, char player)
 {
-	Node	*node,
-		*dest;
+	size_t	size		= board.rows * board.cols + 2;
+	int	*dist		= malloc(sizeof(int) * size);
+	bool	*visited	= malloc(sizeof(bool) * size);
+	Coordinate *nodes	= malloc(sizeof(Coordinate) * size);
+
+	memset(dist, INF, size * sizeof(int));
+	memset(visited, false, size * sizeof(bool));
+
+	//nodes[0]	= TOP;
+	//nodes[1]	= BOTTOM;
+	//nodes[2]	= LEFT;
+	//nodes[3]	= RIGHT;
+
+	int	dest_index = 1;
 
 	if (player == board.players[0])
 	{
-		node = &(hex_graph->left);
-		dest = &(hex_graph->right);
+		//dist[2]		= 0;	// distance to left is 0
+		//dest_index	= 3;	// destination is right
+
+		/*
+		printf("DJIKSTRA destination right, initial dist: %d\n",
+			dist[dest_index]);
+			*/
+		nodes[0]	= LEFT;
+		nodes[1]	= RIGHT;
+
+		dist[0]		= 0;
 	}
 	else
 	{
-		node = &(hex_graph->top);
-		dest = &(hex_graph->bottom);
+		//dist[0]		= 0;	// distance to top is 0
+		//dest_index	= 1;	// destination is bottom
+
+		/*
+		printf("DJIKSTRA destination bottom, initial dist: %d\n",
+			dist[dest_index]);
+			*/
+		nodes[0]	= TOP;
+		nodes[1]	= BOTTOM;
+
+		dist[0]		= 0;
 	}
 
-	hex_graph->left.dist	= INFINITY;
-	hex_graph->right.dist	= INFINITY;
-	hex_graph->top.dist		= INFINITY;
-	hex_graph->bottom.dist	= INFINITY;
-
-	hex_graph->left.prev	= NULL;
-	hex_graph->right.prev	= NULL;
-	hex_graph->top.prev		= NULL;
-	hex_graph->bottom.prev	= NULL;
-
-	node->dist		= 0;
-
-	int	size		= board.rows * board.cols;
-	bool	*visited	= malloc(sizeof(bool) * size);
-	//int	*distances	= malloc(sizeof(int) * size);
-
-	memset(visited, false, sizeof(bool) * size);
-
-	for (int i = 0; i < size; i++)
+	for (int i = 2; i < size; i++)
 	{
-		hex_graph->nodes[i].dist = INFINITY;
-		hex_graph->nodes[i].prev = NULL;
+		int	j	= i - 2;
+		int	col	= j % board.cols;
+		int	row	= (j - col) / board.cols;
+		nodes[i].x	= row;
+		nodes[i].y	= col;
 	}
 
 	for (int i = 0; i < size; i++)
 	{
-		if (node->row >= 0 && node->col >= 0)
+		// select node with minimum distance
+		int node_index	= 0;
+		int node_dist	= INF;
+
+		for (int j = 0; j < size; j++)
 		{
-			int	node_index	= node->row * board.cols + node->col;
-			visited[node_index]	= true;
+			if (dist[j] < node_dist && !visited[j])
+			{
+				node_index	= j;
+				node_dist	= dist[j];
+			}
 		}
 
-		for (int j = 0; j < node->length; j++)
+		visited[node_index] = true;
+
+		//if (node_dist == INF) continue;	// ignore nodes with infinite distance-- must be opponents
+		int row = nodes[node_index].x;
+		int col = nodes[node_index].y;
+		if (node_dist == INF)
 		{
-			Node	*child		= node->neighbours[j];
-			int	child_index	= child->row * board.cols + child->col;
+			/*
+			printf("Skipping node %d (%d) %d,%d / %c%d\n",
+			node_index,
+			node_index - 4,
+			row,
+			col,
+			node_index < 4 ? 'A' + node_index : alphabet[row], col + 1);
+			*/
+			continue;
+		}
 
-			// child is either a side (top, bottom, etc..) or an unvisited node
-			if ( (child->row < 0 || child->col < 0) || !visited[child_index] )
+		/*
+		printf("Evaluating node %d (%d) %d,%d / %c%d\n",
+		node_index,
+		node_index - 4,
+		row,
+		col,
+		node_index < 4 ? 'A' + node_index : alphabet[row], col + 1);
+		*/
+
+		// find all children of this node
+		for (int j = 0; j < size; j++)
+		{
+			// node is a neighbour and hasn't already been processed
+			if (neighbouring(nodes[node_index], nodes[j]) && !visited[j] && j != node_index)
 			{
-				int weight;
-				if (	(child->row < 0 || child->col < 0) ||
-					state[child_index] == player)
+				if (j < 2)	// node is one of top, bottom, left, right
 				{
-					weight = 0;
+					if (node_index < 2)
+					{
+						printf("ERROR connecting two edges!\n");
+					}
+					if (dist[j] > dist[node_index])
+					{
+						// cost of visiting edge is 0
+						dist[j] = dist[node_index];
+					}
 				}
-				else if (state[child_index] == board.empty_cell)
+				else if (state[j - 2] == board.empty_cell)
 				{
-					weight = 1;
+					if (dist[j] > dist[node_index] + 1)
+					{
+						// cost of visiting empty node is 1
+						dist[j] = dist[node_index] + 1;
+					}
 				}
-				else
+				else if (state[j - 2] == player)
 				{
-					continue;
-				}
-
-				if (node->dist + weight < child->dist)
-				{
-					child->dist = node->dist + weight;
-					child->prev = node;
+					if (dist[j] > dist[node_index])
+					{
+						// cost of visting owned cell is 0
+						dist[j] = dist[node_index];
+					}
 				}
 			}
 		}
 	}
 
-	free(visited);
+	//printf("For player %c, shortest path is %d\n", player, dist[dest_index]);
 
-	if (player == board.players[0])
-	{
-		printf("Shortest path to right for %c is %d\n", player, dest->dist);
-	}
-	else
-	{
-		printf("Shortest path to bottom for %c is %d\n", player, dest->dist);
-	}
-
-	return dest->dist;
+	if (dist[dest_index] == INF || dist[dest_index] == -INF) printf("Could not find a path!\n");
+	return dist[dest_index];
 }
 
-Coordinate	compute_best_move(char player)
+bool	neighbouring(Coordinate a, Coordinate b)
 {
-	printf("Computing best move for %c\n", player);
-	size_t	length		= board.rows * board.cols;
-	char	*current_state	= malloc(length * sizeof(char));
-
-	memcpy(current_state, board.contents, length * sizeof(char));
-
-	Coordinate	c	= {-1, -1};
-	int		v	= -INFINITY;
-
-	int		turn	= player == board.players[0] ? 0 : 1;
-
-	for (int i = 0; i < length; i++)
+	if (a.y == TOP.y)
 	{
-		if (current_state[i] != board.empty_cell)	continue;
-		current_state[i]	= player;
-		int n			= alphabeta(current_state, 10, -INFINITY, INFINITY, turn, turn);
-		current_state[i]	= board.empty_cell;
-
-		if (n > v)
-		{
-			c.x = i / board.rows;
-			c.y = i % board.rows;
-			v = n;
-		}
+		return b.x == 0;
+	}
+	else if (b.y == TOP.y)
+	{
+		return a.x == 0;
 	}
 
-	free(current_state);
+	if (a.y == BOTTOM.y)
+	{
+		return b.x + 1 == board.rows;
+	}
+	else if (b.y == BOTTOM.y)
+	{
+		return a.x + 1 == board.rows;
+	}
 
-	printf("For player %c best move is %c%2d\n", player, alphabet[c.x], c.y + 1);
+	if (a.x == LEFT.x)
+	{
+		return b.y == 0;
+	}
+	else if (b.x == LEFT.x)
+	{
+		return a.y == 1;
+	}
 
-	return c;
+	if (a.x == RIGHT.x)
+	{
+		return b.y + 1 == board.cols;
+	}
+	else if (b.x == RIGHT.x)
+	{
+		return a.y + 1 == board.cols;
+	}
+
+	if (	a.x == b.x && 
+		(a.y == b.y + 1 || a.y == b.y - 1))
+	{
+		return true;
+	}
+
+	if (	a.y == b.y &&
+		(a.x == b.x + 1 || a.x == b.x - 1))
+	{
+		return true;
+	}
+
+	if (	(a.x - 1 == b.x && a.y - 1 == b.y) ||
+		(a.x + 1 == b.x && a.y + 1 == b.y))
+	{
+		return true;
+	}
+
+	return false;
 }
