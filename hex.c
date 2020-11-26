@@ -235,16 +235,24 @@ void	start_game()
 					printf("%s make a move: ", player_two_name);
 				}
 
-				char	r;
-				int	c,
-					n = scanf("%c%d", &r, &c);
-				fflush(stdin);
+				int	c	= -1;
+
+				char	r	= '\0',
+					*line	= NULL;
+
+				size_t	size	= 0;
+
+				getline(&line, &size, stdin);
+
+				sscanf(line, "%c%d", &r, &c);
+
+				free(line);
 
 				row	= r - alphabet[0];
 				col	= c - 1;
 
 				// check cell is valid
-				valid_cell = validate_move(row, col) && n == 2;
+				valid_cell = validate_move(row, col);
 
 				if (!valid_cell)
 				{
@@ -322,8 +330,12 @@ bool	invoke_pie(bool computer)
 		//printf("Player 1, you have the option to invoke the pie rule.\n");
 		//printf("Would you like to do so (y/N)? ");
 
-		scanf("%c", &c);
-		fflush(stdin);
+		//fflush(stdin);
+		//scanf("%c", &c);
+		//fflush(stdin);
+
+		c = getchar();
+		flush_input();
 
 		if (!(c == 'y' || c == 'Y'))		return false;
 	}

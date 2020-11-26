@@ -15,3 +15,6 @@ utility.o: utility.c utility.h
 
 clean:
 	rm *.o
+
+tar: hex.c hex.h board.c board.h ansi_colour.c ansi_colour.h utility.c utility.h options.h makefile
+	tar -cvf hex.tgz hex.c hex.h board.c board.h ansi_colour.c ansi_colour.h utility.c utility.h options.h makefile
