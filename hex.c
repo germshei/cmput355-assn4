@@ -25,12 +25,14 @@
 #define	ARG_PIE	"pie="
 #define ARG_AB_DEPTH	"ab-depth="
 #define ARG_TIME	"time"
+#define	ARG_PRINT	"print="
 
 extern	const char	*alphabet;
 extern	GameBoard	board;
 
 bool	using_pie	= DEFAULT_PIE;
 bool	collect_stats	= false;
+bool	print_on	= true;
 
 int	AB_DEPTH	= MAX_AB_DEPTH;
 
@@ -45,6 +47,8 @@ struct	statistics
 typedef struct statistics CStats;
 
 CStats	stats[2];
+long	nodes_evaluated = 0;
+long	nodes_avg_time = 0;
 
 int	main(int argc, char **argv)
 {
@@ -132,6 +136,12 @@ bool	process_arguments(int argc, char **argv)
 				arg		+= strlen(ARG_AB_DEPTH);
 				ab_depth	= atoi(arg);
 			}
+			else if (strncmp(arg, ARG_PRINT, strlen(ARG_PRINT)) == 0)	// PRINT
+			{
+				arg		+= strlen(ARG_PRINT);
+				for (char *c = arg; *c; c++) *c = tolower(*c);
+				print_on	= strncmp(arg, STRING_TRUE, strlen(STRING_TRUE)) == 0;
+			}
 			else if (strcmp(arg, ARG_TIME) == 0)				// STATISTICS
 			{
 				collect_stats	= true;
@@ -214,7 +224,7 @@ void	start_game()
 
 	while ( !(winner = check_winner(board.state)) )
 	{
-		print_board();
+		if (print_on)	print_board();
 
 		board.turn++;
 		
@@ -495,6 +505,11 @@ int	alphabeta(char *state, int depth, int alpha, int beta, char maxp, char p)
 	char	minp	= maxp == board.players[0] ? board.players[1] : board.players[0];
 	size_t	size	= board.size;
 
+	long	start,
+		end;
+
+	if	(collect_stats)	start = clock();
+
 	if	(winner == maxp)
 	{
 		return INT_MAX;	// maxp wins, best possible score
@@ -509,10 +524,11 @@ int	alphabeta(char *state, int depth, int alpha, int beta, char maxp, char p)
 		return alphabeta_heuristic(state, maxp);
 	}
 
+	int v;
 
 	if	(p == maxp)
 	{
-		int v = INT_MIN;
+		v = INT_MIN;
 
 		for (int i = 0; i < size; i++)
 		{
@@ -527,12 +543,10 @@ int	alphabeta(char *state, int depth, int alpha, int beta, char maxp, char p)
 
 			if (alpha >= beta)	break;
 		}
-
-		return v;
 	}
 	else
 	{
-		int v = INT_MAX;
+		v = INT_MAX;
 
 		for (int i = 0; i < size; i++)
 		{
@@ -547,9 +561,18 @@ int	alphabeta(char *state, int depth, int alpha, int beta, char maxp, char p)
 
 			if (alpha >= beta)	break;
 		}
-
-		return v;
 	}
+
+	if	(collect_stats)
+	{
+		end	= clock();
+		long long t_sum = nodes_evaluated * nodes_avg_time;
+		t_sum	+= (end - start);
+		nodes_evaluated++;
+		nodes_avg_time = t_sum / nodes_evaluated;
+	}
+
+	return v;
 }
 
 /*
@@ -650,7 +673,7 @@ void	print_stats()
 		avg_ab	*= 1000; // s to ms
 
 		printf("\tMoves made: %ld\tAverage Time: %Lfms\n", moves, avg_m);
-		printf("\tPotential moves evaluated: %ld\tAverage Time: %Lfms\n", ab, avg_m);
+		printf("\tPotential moves evaluated: %ld\tAverage Time: %Lfms\n", ab, avg_ab);
 	}
 	if (board.computer_player == 1 || board.computer_player == 2)
 	{
@@ -665,6 +688,13 @@ void	print_stats()
 		avg_ab	*= 1000; // s to ms
 
 		printf("\tMoves made: %ld\tAverage Time: %Lfms\n", moves, avg_m);
-		printf("\tPotential moves evaluated: %ld\tAverage Time: %Lfms\n", ab, avg_m);
+		printf("\tPotential moves evaluated: %ld\tAverage Time: %Lfms\n", ab, avg_ab);
+	}
+
+	if (nodes_evaluated > 0)
+	{
+		long double	avg_t	= (long double) nodes_avg_time / (long double) CLOCKS_PER_SEC;
+		printf("Total number of states evaluated: %ld\n", nodes_evaluated);
+		printf("Average time spent on a state: %Lf\n", avg_t);
 	}
 }
