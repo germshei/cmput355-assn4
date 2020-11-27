@@ -507,8 +507,8 @@ int	alphabeta(char *state, int depth, int alpha, int beta, char maxp, char p)
 
 	long	start,
 		end;
-
-	if	(collect_stats)	start = clock();
+	
+	if	(collect_stats)	nodes_evaluated++;
 
 	if	(winner == maxp)
 	{
@@ -523,6 +523,8 @@ int	alphabeta(char *state, int depth, int alpha, int beta, char maxp, char p)
 	{
 		return alphabeta_heuristic(state, maxp);
 	}
+
+	if	(collect_stats)	start = clock();
 
 	int v;
 
@@ -566,9 +568,9 @@ int	alphabeta(char *state, int depth, int alpha, int beta, char maxp, char p)
 	if	(collect_stats)
 	{
 		end	= clock();
-		long long t_sum = nodes_evaluated * nodes_avg_time;
+		long long t_sum = (nodes_evaluated - 1) * nodes_avg_time;
 		t_sum	+= (end - start);
-		nodes_evaluated++;
+		//nodes_evaluated++; already incremented at start
 		nodes_avg_time = t_sum / nodes_evaluated;
 	}
 
@@ -691,6 +693,7 @@ void	print_stats()
 		printf("\tPotential moves evaluated: %ld\tAverage Time: %Lfms\n", ab, avg_ab);
 	}
 
+	printf("Search tree depth limit: %d\n", AB_DEPTH);
 	if (nodes_evaluated > 0)
 	{
 		long double	avg_t	= (long double) nodes_avg_time / (long double) CLOCKS_PER_SEC;
