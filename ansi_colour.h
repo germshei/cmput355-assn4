@@ -1,5 +1,7 @@
 #pragma once
 
+#include "options.h"
+
 #define	FG		"3"
 #define	FG_BRIGHT	"9"
 #define BG		"4"
@@ -21,7 +23,17 @@
 #define	CYAN		"6"
 #define	WHITE		"7"
 #define	ANSI_ESCAPE	"\x1b"
-#define	ANSI_STYLE(x)	ANSI_ESCAPE "[" x "m"
-#define ANSI_CLEAR()	ANSI_STYLE(PLAIN)
+
+#if	USE_COLOURS
+	
+	#define	ANSI_STYLE(x)	ANSI_ESCAPE "[" x "m"
+	#define ANSI_CLEAR()	ANSI_STYLE(PLAIN)
+
+#else
+	
+	#define	ANSI_STYLE(x)	""
+	#define ANSI_CLEAR()	""
+
+#endif
 
 char	*colorize(const char *, const char *);
