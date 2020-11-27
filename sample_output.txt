@@ -1,0 +1,37 @@
+collecting stats
+Computer 1 chose cell a5
+Computer 2 chose cell d2
+Computer 1 chose cell a4
+Computer 2 chose cell d1
+Computer 1 chose cell a3
+Computer 2 chose cell c1
+Computer 1 chose cell a2
+Computer 2 chose cell b1
+Computer 1 chose cell a1
+Computer 2 chose cell b6
+Computer 1 chose cell a6
+               a__1
+            b__/ X\__2
+         c__/ O\__/ X\__3
+      d__/ O\__/  \__/ X\__4
+   e__/ O\__/  \__/  \__/ X\__5
+f__/  \__/ O\__/  \__/  \__/ X\__6
+/  \__/  \__/  \__/  \__/  \__/ X\
+\__/  \__/  \__/  \__/  \__/ O\__/
+   \__/  \__/  \__/  \__/  \__/
+      \__/  \__/  \__/  \__/
+         \__/  \__/  \__/
+            \__/  \__/
+               \__/
+Computer 1 wins!
+Turn history: a5 d2 a4 d1 a3 c1 a2 b1 a1 b6 a6
+Computer Statistics
+Computer Player 1
+	Moves made: 6	Average Time: 178.250000ms
+	Potential moves evaluated: 186	Average Time: 5.702000ms
+Computer Player 2
+	Moves made: 5	Average Time: 6362.600000ms
+	Potential moves evaluated: 155	Average Time: 205.207000ms
+Search tree depth limit: 4
+Total number of states evaluated: 1297822
+Average time spent on a state: 0.000006
