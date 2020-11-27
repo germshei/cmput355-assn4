@@ -24,13 +24,27 @@
 #define ARG_COMPUTER	"computer="
 #define	ARG_PIE	"pie="
 #define ARG_AB_DEPTH	"ab-depth="
+#define ARG_TIME	"time"
 
 extern	const char	*alphabet;
 extern	GameBoard	board;
 
 bool	using_pie	= DEFAULT_PIE;
+bool	collect_stats	= false;
 
 int	AB_DEPTH	= MAX_AB_DEPTH;
+
+struct	statistics
+{
+	long	ab_avg,
+		move_avg,
+		ab_count,
+		move_count;
+};
+
+typedef struct statistics CStats;
+
+CStats	stats[2];
 
 int	main(int argc, char **argv)
 {
@@ -58,8 +72,19 @@ int	main(int argc, char **argv)
 	board.history_length	= 0;
 	board.history		= malloc(board.history_size * sizeof(Location));
 
+	if (collect_stats && board.computer_player >= 0)
+	{
+		printf("collecting stats\n");
+		memset(stats, 0, 2 * sizeof(CStats));
+	}
+
 	start_game();
 	free_board();
+
+	if (collect_stats)
+	{
+		print_stats();
+	}
 }
 
 /*
@@ -107,6 +132,10 @@ bool	process_arguments(int argc, char **argv)
 				arg		+= strlen(ARG_AB_DEPTH);
 				ab_depth	= atoi(arg);
 			}
+			else if (strcmp(arg, ARG_TIME) == 0)				// STATISTICS
+			{
+				collect_stats	= true;
+			}
 			else
 			{
 				printf("Invalid argument: %s\n", argv[i]);
@@ -136,7 +165,7 @@ bool	process_arguments(int argc, char **argv)
 		board.cols	= c;
 	}
 
-	if (computer == 0 || computer == 1)
+	if (computer >= 0 && computer <= 2)
 	{
 		// use given computer player
 		board.computer_player = computer;
@@ -160,20 +189,27 @@ bool	process_arguments(int argc, char **argv)
 void	start_game()
 {
 	char	winner;
-	char	computer_player	= board.computer_player > 0? '\0' : board.players[board.computer_player];
-	
+	//char	computer_player	= board.computer_player > 0? '\0' : board.players[board.computer_player];
+
 	// Coloured strings
 	char	*player_one_name	= COLOUR_ONE "Player 1" ANSI_CLEAR();
 	char	*player_two_name	= COLOUR_TWO "Player 2" ANSI_CLEAR();
-	char	*computer_name;
+	//char	*computer_name;
 
 	if (board.computer_player == 0)
 	{
-		computer_name	= COLOUR_ONE "Computer" ANSI_CLEAR();
+		//computer_name	= COLOUR_ONE "Computer" ANSI_CLEAR();
+		player_one_name		= COLOUR_ONE "Computer" ANSI_CLEAR();
 	}
 	else if (board.computer_player == 1)
 	{
-		computer_name	= COLOUR_TWO "Computer" ANSI_CLEAR();
+		//computer_name	= COLOUR_TWO "Computer" ANSI_CLEAR();
+		player_two_name		= COLOUR_TWO "Computer" ANSI_CLEAR();
+	}
+	else if (board.computer_player == 2)
+	{
+		player_one_name		= COLOUR_ONE "Computer 1" ANSI_CLEAR();
+		player_two_name		= COLOUR_TWO "Computer 2" ANSI_CLEAR();
 	}
 
 	while ( !(winner = check_winner(board.state)) )
@@ -192,7 +228,7 @@ void	start_game()
 		// Second player can choose to invoke pie
 		if (board.turn == 1 && using_pie)
 		{
-			bool c = (player_turn == board.computer_player);
+			bool c = (player_turn == board.computer_player || board.computer_player == 2);
 			if (!c)
 			{
 				printf("%s would you like to invoke pie y/N? ", player_two_name);
@@ -200,10 +236,7 @@ void	start_game()
 
 			if (invoke_pie(c))
 			{
-				if (c)
-				{
-					printf("%s invoked pie\n", computer_name);
-				}
+				printf("%s invoked pie\n", player_two_name);
 
 				// pie is recorded as row = col = -1
 				record_turn(-1, -1);
@@ -212,14 +245,31 @@ void	start_game()
 		}
 
 		// Computer moves
-		if (player_turn == board.computer_player)
+		if (player_turn == board.computer_player || board.computer_player == 2)
 		{
+			clock_t		start,
+					end;
+
+			if (collect_stats)	start = clock();
+
 			Location	move	= find_optimal_move(player);
+
+			if (collect_stats)
+			{
+				CStats	*s	= &(stats[player_turn]);
+				end		= clock();
+				long long t_sum = s->move_avg * s->move_count
+						+ (end - start);
+				s->move_count++;
+				s->move_avg	= t_sum / s->move_count;
+			}
 
 			row	= move.row;
 			col	= move.col;
 
-			printf("%s chose cell %c%d\n", computer_name, alphabet[row], col + 1);
+			char	*name	= player_turn == 0 ? player_one_name : player_two_name;
+
+			printf("%s chose cell %c%d\n", name, alphabet[row], col + 1);
 		}
 		else
 		{
@@ -271,11 +321,7 @@ void	start_game()
 
 	print_board();
 
-	if		(winner == computer_player)
-	{
-		printf("The computer won! Better luck next time.\n");
-	}
-	else if		(winner == board.players[0])
+	if		(winner == board.players[0])
 	{
 		printf("%s wins!\n", player_one_name);
 	}
@@ -361,7 +407,7 @@ bool	should_computer_invoke_pie()
 
 	free(pie_state);
 
-	return ab_pie > ab_current;
+	return ab_pie >= ab_current;
 }
 
 /*
@@ -386,7 +432,11 @@ Location	find_optimal_move(char player)
 	char		*temp_state	= malloc(sizeof(char) * size),
 			opponent	= player == board.players[0] ? board.players[1] : board.players[0];
 	Location	best_move	= {-1, -1};
-	int		best_score	= INT_MIN;
+	int		best_score	= INT_MIN,
+			turn		= board.turn % 2;
+	bool		do_time		= collect_stats && board.computer_player >= 0 &&
+					(board.players[board.computer_player] == player || board.computer_player == 2);
+	CStats		*pstats		= &(stats[turn]);
 
 	memcpy(temp_state, board.state, sizeof(char) * size);
 
@@ -400,7 +450,23 @@ Location	find_optimal_move(char player)
 		if (temp_state[i] != board.empty_cell)	continue;
 
 		temp_state[i]	= player;
+
+		long	start,
+			end;
+
+		if (do_time)	start = clock();
+
 		int	score	= alphabeta(temp_state, AB_DEPTH, INT_MIN, INT_MAX, player, opponent);
+
+		if (do_time)
+		{
+			end		= clock();
+			long long t_sum = pstats->ab_avg * pstats->ab_count
+					+ (end - start);
+			pstats->ab_count	+= 1;
+			pstats->ab_avg		= t_sum / pstats->ab_count;
+
+		}
 
 		if (score > best_score)
 		{
@@ -565,4 +631,40 @@ int	shortest_path(char *state, char player)
 	int shortest = dest->dist;
 
 	return shortest;
+}
+
+void	print_stats()
+{
+	printf("Computer Statistics\n");
+	if (board.computer_player == 0 || board.computer_player == 2)
+	{
+		printf("Computer Player 1\n");
+
+		long	moves	= stats[0].move_count,
+			ab	= stats[0].ab_count;
+
+		long double	avg_m	= (long double) stats[0].move_avg / (long double) CLOCKS_PER_SEC,
+				avg_ab	= (long double) stats[0].ab_avg / (long double) CLOCKS_PER_SEC;
+
+		avg_m	*= 1000; // s to ms
+		avg_ab	*= 1000; // s to ms
+
+		printf("\tMoves made: %ld\tAverage Time: %Lfms\n", moves, avg_m);
+		printf("\tPotential moves evaluated: %ld\tAverage Time: %Lfms\n", ab, avg_m);
+	}
+	if (board.computer_player == 1 || board.computer_player == 2)
+	{
+		printf("Computer Player 2\n");
+		long	moves	= stats[1].move_count,
+			ab	= stats[1].ab_count;
+
+		long double	avg_m	= (long double) stats[1].move_avg / (long double) CLOCKS_PER_SEC,
+				avg_ab	= (long double) stats[1].ab_avg / (long double) CLOCKS_PER_SEC;
+
+		avg_m	*= 1000; // s to ms
+		avg_ab	*= 1000; // s to ms
+
+		printf("\tMoves made: %ld\tAverage Time: %Lfms\n", moves, avg_m);
+		printf("\tPotential moves evaluated: %ld\tAverage Time: %Lfms\n", ab, avg_m);
+	}
 }

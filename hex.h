@@ -15,3 +15,4 @@ Location	find_optimal_move(char player);
 int	alphabeta(char *state, int depth, int alpha, int beta, char maxp, char p);
 int	alphabeta_heuristic(char *state, char maxp);
 int	shortest_path(char *state, char player);
+void	print_stats();
