@@ -1,0 +1,90 @@
+args: -computer=2 -r=11 -c=11 -pie=false -print=false -time
+
+Computer 1 wins!
+Turn history: a11 k1 a10 j1 a9 i1 a8 h1 a7 g1 a6 f1 a5 e1 a4 d1 a3 c1 a2 b1 a1
+Computer Statistics
+Computer Player 1
+	Moves made: 11	Average Time: 118.025000ms
+	Potential moves evaluated: 1221	Average Time: 0.806000ms
+Computer Player 2
+	Moves made: 10	Average Time: 821.275000ms
+	Potential moves evaluated: 1110	Average Time: 7.122000ms
+Search tree depth limit: 1
+Total number of states evaluated: 50126
+Average time spent on a state: 0.000957
+
+
+args: -computer=2 -r=11 -c=11 -pie=true -print=false -time
+
+Computer 2 wins!
+Turn history: a11 pie a11 j1 a10 i1 a9 h1 a8 g1 a7 f1 a6 e1 a5 d1 a4 c1 a3 b1 a2 a1
+Computer Statistics
+Computer Player 1
+	Moves made: 11	Average Time: 136.528000ms
+	Potential moves evaluated: 1231	Average Time: 0.947000ms
+Computer Player 2
+	Moves made: 10	Average Time: 704.479000ms
+	Potential moves evaluated: 1100	Average Time: 6.132000ms
+Search tree depth limit: 1
+Total number of states evaluated: 45133
+Average time spent on a state: 0.000928
+
+args: -computer=2 -r=11 -c=5 -pie=false -print=false -time
+
+Computer 1 wins!
+Turn history: a5 k1 a4 j1 a3 i1 a2 h1 a1
+Computer Statistics
+Computer Player 1
+	Moves made: 5	Average Time: 7.915000ms
+	Potential moves evaluated: 255	Average Time: 0.092000ms
+Computer Player 2
+	Moves made: 4	Average Time: 62.737000ms
+	Potential moves evaluated: 204	Average Time: 1.180000ms
+Search tree depth limit: 1
+Total number of states evaluated: 5819
+Average time spent on a state: 0.000244
+
+args: -computer=2 -r=5 -c=5 -pie=false -print=false -time -ab-depth=0
+
+Computer 1 wins!
+Turn history: a6 f1 a5 e1 a4 d1 a3 c1 a2 b1 a1
+Computer Statistics
+Computer Player 1
+	Moves made: 6	Average Time: 0.303000ms
+	Potential moves evaluated: 186	Average Time: 0.005000ms
+Computer Player 2
+	Moves made: 5	Average Time: 0.684000ms
+	Potential moves evaluated: 155	Average Time: 0.011000ms
+Search tree depth limit: 0
+Total number of states evaluated: 341
+Average time spent on a state: 0.000000
+
+args: -computer=2 -r=5 -c=5 -pie=false -print=false -time -ab-depth=0
+
+Computer 1 wins!
+Turn history: a5 e1 a4 d1 a3 c1 a2 b1 a1 b6 a6
+Computer Statistics
+Computer Player 1
+	Moves made: 6	Average Time: 4.740000ms
+	Potential moves evaluated: 186	Average Time: 0.111000ms
+Computer Player 2
+	Moves made: 5	Average Time: 76.116000ms
+	Potential moves evaluated: 155	Average Time: 2.416000ms
+Search tree depth limit: 2
+Total number of states evaluated: 17833
+Average time spent on a state: 0.000006
+
+args: -computer=2 -r=5 -c=5 -pie=false -print=false -time -ab-depth=0
+
+Computer 1 wins!
+Turn history: a5 d2 a4 d1 a3 c1 a2 b1 a1 b6 a6
+Computer Statistics
+Computer Player 1
+	Moves made: 6	Average Time: 178.250000ms
+	Potential moves evaluated: 186	Average Time: 5.702000ms
+Computer Player 2
+	Moves made: 5	Average Time: 6362.600000ms
+	Potential moves evaluated: 155	Average Time: 205.207000ms
+Search tree depth limit: 4
+Total number of states evaluated: 1297822
+Average time spent on a state: 0.000006
